@@ -41,6 +41,8 @@ static void mstatus_init(struct sbi_scratch *scratch)
 {
 	unsigned long mstatus_val = 0;
 
+    unsigned long num_hw_ctrs = sbi_hart_mhpm_count(scratch) + 3;
+
 	/* Enable FPU */
 	if (misa_extension('D') || misa_extension('F'))
 		mstatus_val |=  MSTATUS_FS;
@@ -54,10 +56,13 @@ static void mstatus_init(struct sbi_scratch *scratch)
 	/* Disable user mode usage of all perf counters except default ones (CY, TM, IR) */
 	if (misa_extension('S') &&
 	    sbi_hart_has_feature(scratch, SBI_HART_HAS_SCOUNTEREN))
-		csr_write(CSR_SCOUNTEREN, 7);
+		csr_write(CSR_SCOUNTEREN, GENMASK(num_hw_ctrs - 1, 0));
 
 	if (sbi_hart_has_feature(scratch, SBI_HART_HAS_MCOUNTEREN)) {
-		if (sbi_hart_has_feature(scratch, SBI_HART_HAS_MCOUNTINHIBIT))
+		if (sbi_hart_has_feature(scratch, SBI_HART_HAS_MCOUNTINHIBIT)
+        && sbi_hart_has_feature(scratch, SBI_HART_HAS_MCOUNTINHIBIT_U)
+        && sbi_hart_has_feature(scratch, SBI_HART_HAS_MCOUNTINHIBIT_S)
+        && sbi_hart_has_feature(scratch, SBI_HART_HAS_MCOUNTINHIBIT_M))
 			/**
 			 * Just enable the default counters (CY, TM, IR) because
 			 * some OS (e.g FreeBSD) expect them to be enabled.
@@ -65,15 +70,26 @@ static void mstatus_init(struct sbi_scratch *scratch)
 			 * All other counters will be enabled at runtime after
 			 * S-mode request.
 			 */
-			csr_write(CSR_MCOUNTEREN, 7);
-		else
-			/* Supervisor mode usage are enabled by default */
-			csr_write(CSR_MCOUNTEREN, -1);
+			csr_write(CSR_MCOUNTEREN, GENMASK(num_hw_ctrs - 1, 0));
+		else {
+            /* Supervisor mode usage are enabled by default */
+            csr_write(CSR_MCOUNTEREN, 0);
+        }
 	}
 
 	/* All programmable counters will start running at runtime after S-mode request */
-	if (sbi_hart_has_feature(scratch, SBI_HART_HAS_MCOUNTINHIBIT))
-		csr_write(CSR_MCOUNTINHIBIT, 0xFFFFFFF8);
+	if (sbi_hart_has_feature(scratch, SBI_HART_HAS_MCOUNTINHIBIT)) {
+        csr_write(CSR_MCOUNTINHIBIT, ~GENMASK(num_hw_ctrs - 1, 0));
+    }
+    if (sbi_hart_has_feature(scratch, SBI_HART_HAS_MCOUNTINHIBIT_U)) {
+        csr_write(CSR_MCOUNTINHIBIT_U, 0xFFFFFFFF);
+    }
+    if (sbi_hart_has_feature(scratch, SBI_HART_HAS_MCOUNTINHIBIT_S)) {
+        csr_write(CSR_MCOUNTINHIBIT_S, 0xFFFFFFFF);
+    }
+    if (sbi_hart_has_feature(scratch, SBI_HART_HAS_MCOUNTINHIBIT_M)) {
+        csr_write(CSR_MCOUNTINHIBIT_M, 0xFFFFFFFF);
+    }
 
 	/* Disable all interrupts */
 	csr_write(CSR_MIE, 0);
@@ -81,6 +97,9 @@ static void mstatus_init(struct sbi_scratch *scratch)
 	/* Disable S-mode paging */
 	if (misa_extension('S'))
 		csr_write(CSR_SATP, 0);
+
+    csr_write(mhpmevent3, 0b01001);
+    csr_write(mhpmevent4, 0b01010);
 }
 
 static int fp_init(struct sbi_scratch *scratch)
@@ -284,6 +303,15 @@ static inline char *sbi_hart_feature_id2string(unsigned long feature)
 	case SBI_HART_HAS_TIME:
 		fstr = "time";
 		break;
+    case SBI_HART_HAS_MCOUNTINHIBIT_U:
+        fstr = "mcountinhibitu";
+        break;
+    case SBI_HART_HAS_MCOUNTINHIBIT_S:
+        fstr = "mcountinhibits";
+        break;
+    case SBI_HART_HAS_MCOUNTINHIBIT_M:
+        fstr = "mcountinhibitm";
+        break;
 	default:
 		break;
 	}
@@ -494,6 +522,30 @@ __mhpm_skip:
 	csr_read_allowed(CSR_TIME, (unsigned long)&trap);
 	if (!trap.cause)
 		hfeatures->features |= SBI_HART_HAS_TIME;
+
+    /* Detect if hart supports MCOUNTINHIBIT_U feature */
+    val = csr_read_allowed(CSR_MCOUNTINHIBIT_U, (unsigned long)&trap);
+    if (!trap.cause) {
+        csr_write_allowed(CSR_MCOUNTINHIBIT_U, (unsigned long)&trap, val);
+        if (!trap.cause)
+            hfeatures->features |= SBI_HART_HAS_MCOUNTINHIBIT_U;
+    }
+
+    /* Detect if hart supports MCOUNTINHIBIT_S feature */
+    val = csr_read_allowed(CSR_MCOUNTINHIBIT_S, (unsigned long)&trap);
+    if (!trap.cause) {
+        csr_write_allowed(CSR_MCOUNTINHIBIT_S, (unsigned long)&trap, val);
+        if (!trap.cause)
+            hfeatures->features |= SBI_HART_HAS_MCOUNTINHIBIT_S;
+    }
+
+    /* Detect if hart supports MCOUNTINHIBIT_M feature */
+    val = csr_read_allowed(CSR_MCOUNTINHIBIT_M, (unsigned long)&trap);
+    if (!trap.cause) {
+        csr_write_allowed(CSR_MCOUNTINHIBIT_M, (unsigned long)&trap, val);
+        if (!trap.cause)
+            hfeatures->features |= SBI_HART_HAS_MCOUNTINHIBIT_M;
+    }
 }
 
 int sbi_hart_reinit(struct sbi_scratch *scratch)

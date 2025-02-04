@@ -22,9 +22,15 @@ enum sbi_hart_features {
 	SBI_HART_HAS_MCOUNTINHIBIT = (1 << 2),
 	/** HART has timer csr implementation in hardware */
 	SBI_HART_HAS_TIME = (1 << 3),
+    /** Hart has counter inhibit CSR for U-mode*/
+    SBI_HART_HAS_MCOUNTINHIBIT_U = (1 << 4),
+    /** Hart has counter inhibit CSR for U-mode*/
+    SBI_HART_HAS_MCOUNTINHIBIT_S = (1 << 5),
+    /** Hart has counter inhibit CSR for U-mode*/
+    SBI_HART_HAS_MCOUNTINHIBIT_M = (1 << 6),
 
 	/** Last index of Hart features*/
-	SBI_HART_HAS_LAST_FEATURE = SBI_HART_HAS_TIME,
+	SBI_HART_HAS_LAST_FEATURE = SBI_HART_HAS_MCOUNTINHIBIT_M,
 };
 
 struct sbi_scratch;

@@ -200,6 +200,7 @@ void csr_write_num(int csr_num, unsigned long val)
 	switchcase_csr_write_16(CSR_MHPMEVENT16, val)
 
 	default:
+        sbi_printf("CIDX = %u\n", csr_num);
 		BUG();
 		break;
 	};

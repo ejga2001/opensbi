@@ -241,12 +241,12 @@ static int pmu_ctr_start_hw(uint32_t cidx, uint64_t ival, bool ival_update)
 {
 	unsigned long mctr_en = csr_read(CSR_MCOUNTEREN);
 	unsigned long mctr_inhbt = csr_read(CSR_MCOUNTINHIBIT);
-
 	/* Make sure the counter index lies within the range and is not TM bit */
 	if (cidx > num_hw_ctrs || cidx == 1)
 		return SBI_EINVAL;
 
-	if (__test_bit(cidx, &mctr_en) && !__test_bit(cidx, &mctr_inhbt))
+	if (__test_bit(cidx, &mctr_en)
+    && !__test_bit(cidx, &mctr_inhbt))
 		return SBI_EALREADY_STARTED;
 
 	__set_bit(cidx, &mctr_en);
@@ -273,6 +273,18 @@ static int pmu_ctr_start_fw(uint32_t cidx, uint32_t fw_evt_code,
 	fevent->bStarted = TRUE;
 
 	return 0;
+}
+
+int sbi_pmu_ctr_write_hw(uint32_t cidx, uint64_t ival)
+{
+#if __riscv_xlen == 32
+    csr_write_num(CSR_MCYCLE + cidx, 0);
+	csr_write_num(CSR_MCYCLE + cidx, ival & 0xFFFF);
+	csr_write_num(CSR_MCYCLEH + cidx, ival >> BITS_PER_LONG);
+#else
+    csr_write_num(CSR_MCYCLE + cidx, ival);
+#endif
+    return 0;
 }
 
 int sbi_pmu_ctr_start(unsigned long cbase, unsigned long cmask,
@@ -360,6 +372,95 @@ int sbi_pmu_ctr_stop(unsigned long cbase, unsigned long cmask,
 	}
 
 	return ret;
+}
+
+int sbi_pmu_ctr_mode_stop(int stop, CPUMode mode, uint32_t cidx)
+{
+    /* Make sure the counter index lies within the range and is not TM bit */
+    if (cidx > num_hw_ctrs || cidx == 1) {
+        sbi_printf("COUNTER INDEX OUT OF RANGE\nCIDX = %d\nNUM_HW_CTRS = %u\n", cidx, num_hw_ctrs);
+        return SBI_EINVAL;
+    }
+
+    unsigned long mctr_en = csr_read(CSR_MCOUNTEREN);
+    unsigned long mctr_inhbt = csr_read(CSR_MCOUNTINHIBIT);
+    unsigned long mctr_inhbt_u = csr_read(CSR_MCOUNTINHIBIT_U);
+    unsigned long mctr_inhbt_s = csr_read(CSR_MCOUNTINHIBIT_S);
+    unsigned long mctr_inhbt_m = csr_read(CSR_MCOUNTINHIBIT_M);
+
+    switch (mode) {
+        case ALL_MODES:
+            if (stop) {
+                if (!__test_bit(cidx, &mctr_inhbt)) {
+                    __set_bit(cidx, &mctr_inhbt);
+                    csr_write(CSR_MCOUNTINHIBIT, mctr_inhbt);
+                    return 0;
+                } else {
+                    sbi_printf("STOP = %d\nMCOUNTEREN = %lu\nMCOUNTINHIBIT = %lu\n", stop, mctr_en, mctr_inhbt);
+                    return SBI_EALREADY_STOPPED;
+                }
+            } else {
+                if (__test_bit(cidx, &mctr_inhbt)) {
+                    __clear_bit(cidx, &mctr_inhbt);
+                    csr_write(CSR_MCOUNTINHIBIT, mctr_inhbt);
+                    return 0;
+                } else {
+                    sbi_printf("STOP = %d\nMCOUNTEREN = %lu\nMCOUNTINHIBIT = %lu\n", stop, mctr_en, mctr_inhbt);
+                    return SBI_EALREADY_STARTED;
+                }
+            }
+        case U_MODE:
+            if (stop) {
+                if (!__test_bit(cidx, &mctr_inhbt_u)) {
+                    __set_bit(cidx, &mctr_inhbt_u);
+                    csr_write(CSR_MCOUNTINHIBIT_U, mctr_inhbt_u);
+                    return 0;
+                } else
+                    return SBI_EALREADY_STOPPED;
+            } else {
+                if (__test_bit(cidx, &mctr_inhbt_u)) {
+                    __clear_bit(cidx, &mctr_inhbt_u);
+                    csr_write(CSR_MCOUNTINHIBIT_U, mctr_inhbt_u);
+                    return 0;
+                } else
+                    return SBI_EALREADY_STARTED;
+            }
+        case S_MODE:
+            if (stop) {
+                if (!__test_bit(cidx, &mctr_inhbt_s)) {
+                    __set_bit(cidx, &mctr_inhbt_s);
+                    csr_write(CSR_MCOUNTINHIBIT_S, mctr_inhbt_s);
+                    return 0;
+                } else
+                    return SBI_EALREADY_STOPPED;
+            } else {
+                if (__test_bit(cidx, &mctr_inhbt_s)) {
+                    __clear_bit(cidx, &mctr_inhbt_s);
+                    csr_write(CSR_MCOUNTINHIBIT_S, mctr_inhbt_s);
+                    return 0;
+                } else
+                    return SBI_EALREADY_STARTED;
+            }
+        case M_MODE:
+            if (stop) {
+                if (!__test_bit(cidx, &mctr_inhbt_m)) {
+                    __set_bit(cidx, &mctr_inhbt_m);
+                    csr_write(CSR_MCOUNTINHIBIT_M, mctr_inhbt_m);
+                    return 0;
+                } else
+                    return SBI_EALREADY_STOPPED;
+            } else {
+                if (__test_bit(cidx, &mctr_inhbt_m)) {
+                    __clear_bit(cidx, &mctr_inhbt_m);
+                    csr_write(CSR_MCOUNTINHIBIT_M, mctr_inhbt_m);
+                    return 0;
+                } else
+                    return SBI_EALREADY_STARTED;
+            }
+        default:
+            sbi_printf("UNKNOWN MODE\nCIDX = %d\nMODE = %u\n", cidx, mode);
+            return SBI_EINVAL;
+    }
 }
 
 static int pmu_update_hw_mhpmevent(struct sbi_pmu_hw_event *hw_evt, int ctr_idx,
@@ -534,7 +635,8 @@ inline int sbi_pmu_ctr_incr_fw(enum sbi_pmu_fw_event_code_id fw_id)
 
 unsigned long sbi_pmu_num_ctr(void)
 {
-	return (num_hw_ctrs + SBI_PMU_FW_CTR_MAX);
+	//return (num_hw_ctrs + SBI_PMU_FW_CTR_MAX);
+    return num_hw_ctrs;
 }
 
 int sbi_pmu_ctr_get_info(uint32_t cidx, unsigned long *ctr_info)
@@ -587,7 +689,7 @@ void sbi_pmu_exit(struct sbi_scratch *scratch)
 	if (!sbi_hart_has_feature(scratch, SBI_HART_HAS_MCOUNTINHIBIT))
 		return;
 
-	csr_write(CSR_MCOUNTINHIBIT, 0xFFFFFFF8);
+	csr_write(CSR_MCOUNTINHIBIT, 0xFFFFFFFF);
 	csr_write(CSR_MCOUNTEREN, 7);
 	pmu_reset_event_map(hartid);
 }

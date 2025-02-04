@@ -27,6 +27,13 @@
 #define SBI_PMU_HW_CTR_MAX 32
 #define SBI_PMU_CTR_MAX	   (SBI_PMU_HW_CTR_MAX + SBI_PMU_FW_CTR_MAX)
 
+typedef enum CPUMode {
+    ALL_MODES = 0,
+    U_MODE = 1,
+    S_MODE = 2,
+    M_MODE = 3
+} CPUMode;
+
 /** Initialize PMU */
 int sbi_pmu_init(struct sbi_scratch *scratch, bool cold_boot);
 
@@ -56,6 +63,10 @@ int sbi_pmu_ctr_read(uint32_t cidx, unsigned long *cval);
 
 int sbi_pmu_ctr_stop(unsigned long cidx_base, unsigned long cidx_mask,
 		     unsigned long flag);
+
+int sbi_pmu_ctr_mode_stop(int stop, CPUMode mode, uint32_t cidx);
+
+int sbi_pmu_ctr_write_hw(uint32_t cidx, uint64_t ival);
 
 int sbi_pmu_ctr_start(unsigned long cidx_base, unsigned long cidx_mask,
 		      unsigned long flags, uint64_t ival);

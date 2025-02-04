@@ -65,6 +65,12 @@ static int sbi_ecall_pmu_handler(unsigned long extid, unsigned long funcid,
 	case SBI_EXT_PMU_COUNTER_STOP:
 		ret = sbi_pmu_ctr_stop(regs->a0, regs->a1, regs->a2);
 		break;
+    case SBI_EXT_PMU_COUNTER_MODE_STOP:
+        ret = sbi_pmu_ctr_mode_stop(regs->a0, (CPUMode)regs->a1, regs->a2);
+        break;
+    case SBI_EXT_PMU_COUNTER_WRITE:
+        ret = sbi_pmu_ctr_write_hw(regs->a0, regs->a1);
+        break;
 	default:
 		ret = SBI_ENOTSUPP;
 	};
