@@ -100,6 +100,8 @@ static void mstatus_init(struct sbi_scratch *scratch)
 
     csr_write(mhpmevent3, 0b01001);
     csr_write(mhpmevent4, 0b01010);
+    csr_write(mhpmevent5, 0b11010);
+    csr_write(mhpmevent6, 0b00100);
 }
 
 static int fp_init(struct sbi_scratch *scratch)
