@@ -98,10 +98,9 @@ static void mstatus_init(struct sbi_scratch *scratch)
 	if (misa_extension('S'))
 		csr_write(CSR_SATP, 0);
 
-    csr_write(mhpmevent3, 0b01001);
-    csr_write(mhpmevent4, 0b01010);
-    csr_write(mhpmevent5, 0b11010);
-    csr_write(mhpmevent6, 0b00100);
+	csr_write(mhpmevent3, 0x201);
+	csr_write(mhpmevent4, 0x401);
+	csr_write(mhpmevent6, 0x1002);
 }
 
 static int fp_init(struct sbi_scratch *scratch)
